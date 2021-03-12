@@ -10,7 +10,7 @@ from variation6.in_out.zarr import (DEF_VCF_FIELDS,
                                     ZARR_VARIATION_FIELD_MAPPING)
 
 
-def vcf_to_hdf5(vcf_path, zarr_path, fields=None):
+def vcf_to_hdf5(vcf_path, h5_path, fields=None):
     if fields is None:
         fields = DEF_VCF_FIELDS
 
@@ -19,7 +19,7 @@ def vcf_to_hdf5(vcf_path, zarr_path, fields=None):
     if 'samples' not in zarr_fields:
         zarr_fields.append('samples')
 
-    allel.vcf_to_hdf5(str(vcf_path), str(zarr_path), fields=zarr_fields)
+    allel.vcf_to_hdf5(str(vcf_path), str(h5_path), fields=zarr_fields)
 
 
 def load_hdf5(path):

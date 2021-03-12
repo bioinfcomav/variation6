@@ -134,7 +134,7 @@ def calc_mac(variations, max_alleles,
 
 def _call_is_hom_in_memory(gts):
     is_hom = va.create_full_array_in_memory(gts.shape[:-1], True,
-                                            dtype=numpy.bool)
+                                            dtype=bool)
     for idx in range(1, gts.shape[2]):
         is_hom = va.logical_and(gts[:, :, idx] == gts[:, :, idx - 1], is_hom)
     return is_hom
@@ -312,7 +312,7 @@ def calc_diversities(variations, max_alleles, min_num_genotypes,
     return diversities
 
 
-def summarize_variations(in_zarr_path, out_dir_path, draw_missin_rate=True,
+def summarize_variations(in_zarr_path, out_dir_path, draw_missing_rate=True,
                          draw_mac=True, draw_maf=True, draw_obs_het=True,
                          min_call_dp_for_het_call=MIN_DP_FOR_CALL_HET,
                          min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
@@ -323,7 +323,7 @@ def summarize_variations(in_zarr_path, out_dir_path, draw_missin_rate=True,
     num_variations = variations.num_variations
     num_samples = variations.num_samples
 
-    if draw_missin_rate:
+    if draw_missing_rate:
         _stats = calc_called_gt(variations, rates=True)
         counts, edges = va.histogram(_stats, n_bins=num_bins, limits=(0, 1))
         stats['called'] = {'counts': counts, 'edges': edges}
