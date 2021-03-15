@@ -25,6 +25,16 @@ def calc_missing_gt(variations, rates=True):
     return num_missing_gts
 
 
+def calc_missing_gt_per_sample(variations, rates=True):
+    gts = variations[GT_FIELD]
+    ploidy = variations.ploidy
+    bool_gts = gts == MISSING_GT
+    num_missing_gts = bool_gts.sum(axis=(0, 2)) / ploidy
+    if rates:
+        num_missing_gts = num_missing_gts / utils_array.get_shape_item(gts, 0)
+    return num_missing_gts
+
+
 def calc_maf_by_allele_count(variations,
                              min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     ro = variations[RO_FIELD]

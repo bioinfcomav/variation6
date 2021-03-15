@@ -3,14 +3,19 @@ import unittest
 import numpy as np
 
 from variation6.variations import Variations
-from variation6 import GT_FIELD, CHROM_FIELD
+from variation6 import GT_FIELD, CHROM_FIELD, NotMaterializedError
 from variation6.tests import TEST_DATA_DIR
 from variation6.in_out.zarr import load_zarr
 from variation6.filters import remove_low_call_rate_vars, FLT_VARS
 
 
-def _create_empty_dask_variations():
+def _load_one_dask():
     variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+    return variations
+
+
+def _create_empty_dask_variations():
+    variations = _load_one_dask()
     return remove_low_call_rate_vars(variations, min_call_rate=1.1)[FLT_VARS]
 
 
@@ -68,7 +73,7 @@ class VariationsTest(unittest.TestCase):
         variations = load_zarr((TEST_DATA_DIR / 'test.zarr'), num_vars_per_chunk=1)
         chunks = list(variations.iterate_chunks())
         self.assertEqual(len(chunks), 7)
-        
+
     def test_unavailable_shape(self):
         variations = Variations()
         variations.samples = ['1', '2', '3']
@@ -79,8 +84,8 @@ class VariationsTest(unittest.TestCase):
         variations = _create_empty_dask_variations()
         try:
             variations.num_variations
-            self.fail('RuntimeError expected')
-        except RuntimeError:
+            self.fail('NotMaterializedError expected')
+        except NotMaterializedError:
             pass
 
 if __name__ == "__main__":
