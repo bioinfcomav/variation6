@@ -115,3 +115,7 @@ MISSING_VALUES = _MissingValues()
 
 class EmptyVariationsError(Exception):
     pass
+
+
+class NotMaterializedError(Exception):
+    pass

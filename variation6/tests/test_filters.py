@@ -1,3 +1,4 @@
+import test_config
 import unittest
 import dask.array as da
 import numpy as np

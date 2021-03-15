@@ -10,6 +10,7 @@ from variation6.plot import plot_histogram
 from variation6.compute import compute
 from variation6.in_out.zarr import load_zarr
 from variation6.array.array_calculations import DEF_NUM_BINS
+from variation6 import utils_array
 
 MIN_DP_FOR_CALL_HET = 20
 
@@ -20,7 +21,7 @@ def calc_missing_gt(variations, rates=True):
     bool_gts = gts == MISSING_GT
     num_missing_gts = bool_gts.sum(axis=(1, 2)) / ploidy
     if rates:
-        num_missing_gts = num_missing_gts / gts.shape[1]
+        num_missing_gts = num_missing_gts / utils_array.get_shape_item(gts, 1)
     return num_missing_gts
 
 

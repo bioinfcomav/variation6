@@ -5,7 +5,7 @@ from collections import OrderedDict
 import numpy as np
 import dask.array as da
 from variation6 import (PUBLIC_CALL_GROUP, GT_FIELD, EmptyVariationsError,
-                        DEF_CHUNK_SIZE)
+                        DEF_CHUNK_SIZE, NotMaterializedError)
 
 
 class Variations:
@@ -66,7 +66,7 @@ class Variations:
 
         if math.isnan(num_samples):
             msg = 'These variations have no defined number of samples (maybe they have been filtered, but have not been computed)'
-            raise RuntimeError(msg)
+            raise NotMaterializedError(msg)
         return num_samples
 
     def _get_one_array(self):
@@ -88,7 +88,7 @@ class Variations:
         num_variations = one_mat.shape[0]
         if math.isnan(num_variations):
             msg = 'These variations have no defined number of variants (maybe they have been filtered, but have not been computed)'
-            raise RuntimeError(msg)
+            raise NotMaterializedError(msg)
         return num_variations
 
     def __setitem__(self, key, value):
@@ -98,7 +98,7 @@ class Variations:
         # we can not check by shape 0 if array is not computed.
         try:
             num_variations = self.num_variations
-        except RuntimeError:
+        except NotMaterializedError:
             num_variations = None
         if (num_variations != 0 and num_variations is not None and
             num_variations != value.shape[0]):
