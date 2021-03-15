@@ -1,3 +1,4 @@
+import test_config
 import unittest
 import numpy as np
 
@@ -5,6 +6,12 @@ from variation6.variations import Variations
 from variation6 import GT_FIELD, CHROM_FIELD
 from variation6.tests import TEST_DATA_DIR
 from variation6.in_out.zarr import load_zarr
+from variation6.filters import remove_low_call_rate_vars, FLT_VARS
+
+
+def _create_empty_dask_variations():
+    variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+    return remove_low_call_rate_vars(variations, min_call_rate=1.1)[FLT_VARS]
 
 
 class VariationsTest(unittest.TestCase):
@@ -61,7 +68,20 @@ class VariationsTest(unittest.TestCase):
         variations = load_zarr((TEST_DATA_DIR / 'test.zarr'), num_vars_per_chunk=1)
         chunks = list(variations.iterate_chunks())
         self.assertEqual(len(chunks), 7)
+        
+    def test_unavailable_shape(self):
+        variations = Variations()
+        variations.samples = ['1', '2', '3']
+        gts = np.array([[1, 2, 3], [1, 2, 3], [1, 2, 3]])
+        variations[GT_FIELD] = gts
+        assert variations.num_variations == 3
 
+        variations = _create_empty_dask_variations()
+        try:
+            variations.num_variations
+            self.fail('RuntimeError expected')
+        except RuntimeError:
+            pass
 
 if __name__ == "__main__":
     unittest.main()

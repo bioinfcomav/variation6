@@ -61,26 +61,49 @@ class Variations:
     def num_samples(self):
         if self.samples is None:
             return 0
-        return self.samples.size
+
+        num_samples = self.samples.size
+
+        if math.isnan(num_samples):
+            msg = 'These variations have no defined number of samples (maybe they have been filtered, but have not been computed)'
+            raise RuntimeError(msg)
+        return num_samples
+
+    def _get_one_array(self):
+        try:
+            one_path = next((x for x in self._arrays), None)
+        except StopIteration:
+            one_path = None
+        if one_path is None:
+            return None
+        one_mat = self[one_path]
+        return one_mat
 
     @property
     def num_variations(self):
-        one_path = next((x for x in self._arrays), None)
-        if one_path is None:
+        one_mat = self._get_one_array()
+        if one_mat is None:
             return 0
 
-        one_mat = self[one_path]
-        return one_mat.shape[0]
+        num_variations = one_mat.shape[0]
+        if math.isnan(num_variations):
+            msg = 'These variations have no defined number of variants (maybe they have been filtered, but have not been computed)'
+            raise RuntimeError(msg)
+        return num_variations
 
     def __setitem__(self, key, value):
         if key == 'samples':
             self.samples = value
 
         # we can not check by shape 0 if array is not computed.
-        if (self.num_variations != 0 and not math.isnan(self.num_variations)
-                and self.num_variations != value.shape[0]):
+        try:
+            num_variations = self.num_variations
+        except RuntimeError:
+            num_variations = None
+        if (num_variations != 0 and num_variations is not None and
+            num_variations != value.shape[0]):
             msg = "Introduced matrix shape does not fit with already "
-            msg += "addded matrices"
+            msg += "added matrices"
             raise ValueError(msg)
 
         if PUBLIC_CALL_GROUP in key:
