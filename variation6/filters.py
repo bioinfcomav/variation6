@@ -7,15 +7,18 @@ from variation6 import (GT_FIELD, DP_FIELD, MISSING_INT, QUAL_FIELD,
                         PUBLIC_CALL_GROUP, N_KEPT, N_FILTERED_OUT,
                         FLT_VARS, CHROM_FIELD, POS_FIELD,
                         MIN_NUM_GENOTYPES_FOR_POP_STAT, ALT_FIELD, FLT_STATS,
-                        FLT_ID, COUNT, BIN_EDGES)
+                        FLT_ID, COUNT, BIN_EDGES, N_SAMPLES_KEPT,
+                        N_SAMPLES_FILTERED_OUT, HIST_RANGE)
 from variation6.variations import Variations
 import variation6.array as va
 from variation6.stats.diversity import (calc_missing_gt, calc_maf_by_allele_count,
-                                        calc_mac, calc_maf_by_gt, count_alleles,
+                                        calc_mac, calc_maf_by_gt,
+                                        calc_missing_gt_per_sample, count_alleles,
                                         calc_obs_het, DEF_NUM_BINS)
 from variation6.in_out.zarr import load_zarr, prepare_zarr_storage
 from variation6.compute import compute
 from variation6.plot import plot_histogram
+import variation6.utils_array
 
 
 def remove_low_call_rate_vars(variations, min_call_rate, rates=True,
@@ -25,7 +28,7 @@ def remove_low_call_rate_vars(variations, min_call_rate, rates=True,
     if rates:
         num_called = 1 - num_missing_gts
     else:
-        num_called = variations.gt.shape[1] - num_missing_gts
+        num_called = utils_array.get_shape_item(variations.gt, 1)  - num_missing_gts
 
     selected_vars = num_called >= min_call_rate
     variations = variations.get_vars(selected_vars)
@@ -33,15 +36,45 @@ def remove_low_call_rate_vars(variations, min_call_rate, rates=True,
     num_selected_vars = va.count_nonzero(selected_vars)
     num_filtered = va.count_nonzero(va.logical_not(selected_vars))
 
-    flt_stats = {N_KEPT: num_selected_vars, N_FILTERED_OUT: num_filtered}
+    flt_stats = {N_KEPT: num_selected_vars,
+                 N_FILTERED_OUT: num_filtered}
 
     if calc_histogram:
         limits = (0, 1) if rates else (0, len(variations.num_samples))
         counts, bin_edges = va.histogram(num_called, n_bins=n_bins, limits=limits)
         flt_stats[COUNT] = counts
         flt_stats[BIN_EDGES] = bin_edges
-        flt_stats['limits'] = [min_call_rate]
+        flt_stats[HIST_RANGE] = [min_call_rate]
 
+    return {FLT_VARS: variations, FLT_ID: filter_id, FLT_STATS:flt_stats}
+
+
+def remove_low_call_rate_samples(variations, min_call_rate, rates=True,
+                                 filter_id='sample_call_rate',
+                                 calc_histogram=False,
+                                 n_bins=DEF_NUM_BINS, limits=None):
+
+    num_missing_gts = calc_missing_gt_per_sample(variations, rates=rates)
+    if rates:
+        num_called = 1 - num_missing_gts
+    else:
+        num_called = utils_array.get_shape_item(variations.gt, 0)  - num_missing_gts
+
+    selected_samples = num_called >= min_call_rate
+    variations = keep_samples_with_mask(variations, selected_samples)[FLT_VARS]
+
+    num_selected_samples = va.count_nonzero(selected_samples)
+    num_filtered_samples = va.count_nonzero(va.logical_not(selected_samples))
+
+    flt_stats = {N_SAMPLES_KEPT: num_selected_samples,
+                 N_SAMPLES_FILTERED_OUT: num_filtered_samples}
+
+    if calc_histogram:
+        limits = (0, 1) if rates else (0, len(variations.num_variations))
+        counts, bin_edges = va.histogram(num_called, n_bins=n_bins, limits=limits)
+        flt_stats[COUNT] = counts
+        flt_stats[BIN_EDGES] = bin_edges
+        flt_stats[HIST_RANGE] = [min_call_rate]
     return {FLT_VARS: variations, FLT_ID: filter_id, FLT_STATS:flt_stats}
 
 
@@ -86,16 +119,21 @@ def remove_samples(variations, samples):
     return _filter_samples(variations, samples, reverse=True)
 
 
-def _filter_samples(variations, samples, reverse=False):
-    samples_in_variation = va.make_sure_array_is_in_memory(variations.samples)
-    sample_cols = np.array(sorted(list(samples_in_variation).index(sample) for sample in samples))
-    samples = [samples_in_variation[index] for index in sample_cols]
+def keep_samples_with_mask(variations, sample_mask):
+    orig_sample_names = list(va.make_sure_array_is_in_memory(variations.samples))
+    desired_samples = [sample for keep, sample in zip(sample_mask, orig_sample_names) if keep]
+    return _filter_samples(variations, desired_samples)
+
+
+def _filter_samples(variations, desired_samples, reverse=False):
+    orig_sample_names = list(va.make_sure_array_is_in_memory(variations.samples))
 
     if reverse:
-        sample_cols = [index for index in range(len(samples_in_variation)) if index not in sample_cols]
-        samples = [sample for index, sample in enumerate(samples_in_variation) if index in sample_cols]
+        desired_samples = [sample for sample in orig_sample_names if sample not in desired_samples]
 
-    new_variations = Variations(samples=np.array(samples),
+    sample_cols = np.array([orig_sample_names.index(sample) for sample in desired_samples])
+
+    new_variations = Variations(samples=np.array(desired_samples),
                                 metadata=variations.metadata)
     for field, array in variations._arrays.items():
         if PUBLIC_CALL_GROUP in field:

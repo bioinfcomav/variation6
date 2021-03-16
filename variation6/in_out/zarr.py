@@ -8,10 +8,8 @@ from dask.utils import SerializableLock
 
 from variation6 import (CHROM_FIELD, POS_FIELD, ID_FIELD, REF_FIELD, ALT_FIELD,
                         QUAL_FIELD, GT_FIELD, GQ_FIELD, DP_FIELD, AO_FIELD,
-                        RO_FIELD, AD_FIELD)
+                        RO_FIELD, AD_FIELD, DEFAULT_VARIATION_NUM_IN_CHUNK)
 from variation6.variations import Variations
-
-DEFAULT_VARIATION_NUM_IN_CHUNK = 40000
 
 ZARR_CHROM_FIELD_NAME = 'CHROM'
 ZARR_POS_FIELD_NAME = 'POS'

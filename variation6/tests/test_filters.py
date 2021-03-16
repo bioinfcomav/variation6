@@ -1,14 +1,19 @@
-import test_config
 import unittest
+
 import dask.array as da
 import numpy as np
 
+from test_utils import (create_dask_variations,
+                        create_non_materialized_snp_filtered_variations)
+
 from variation6 import (GT_FIELD, DP_FIELD, MISSING_INT, FLT_VARS, N_KEPT,
                         N_FILTERED_OUT, CHROM_FIELD, POS_FIELD, FLT_STATS,
-                        COUNT, BIN_EDGES)
+                        COUNT, BIN_EDGES,
+                        N_SAMPLES_KEPT, N_SAMPLES_FILTERED_OUT)
 from variation6.tests import TEST_DATA_DIR
 from variation6.in_out.zarr import load_zarr
 from variation6.filters import (remove_low_call_rate_vars,
+                                remove_low_call_rate_samples,
                                 min_depth_gt_to_missing,
                                 keep_samples, filter_by_maf_by_allele_count,
                                 filter_by_mac, filter_by_maf,
@@ -26,7 +31,7 @@ from variation6.stats.diversity import DEF_NUM_BINS
 class MinCallFilterTest(unittest.TestCase):
 
     def test_filter_by_call_rate(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
         pipeline_futures = {}
 
         future_result = remove_low_call_rate_vars(variations,
@@ -49,10 +54,48 @@ class MinCallFilterTest(unittest.TestCase):
         self.assertTrue(np.all(processed[FLT_VARS].samples == variations.samples.compute()))
         self.assertEqual(processed[FLT_VARS].metadata, variations.metadata)
 
-    def test_filter_by_call_rate_in_memory(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+    def test_filter_samples_by_call_rate(self):
+        variations = create_dask_variations()
+        self._test_filter_samples_by_call_rate(variations, True)
+
+    def test_filter_samples_by_call_rate_in_memory(self):
+        variations = create_dask_variations()
         variations = compute({'vars': variations},
-                             store_variation_to_memory=True)['vars']
+                            store_variation_to_memory=True)['vars']
+        self._test_filter_samples_by_call_rate(variations, False)
+
+    def _test_filter_samples_by_call_rate(self, variations, do_computation):
+
+        tasks = {}
+        task = remove_low_call_rate_samples(variations,
+                                            min_call_rate=0.5,
+                                            filter_id='call_rate')
+        _add_task_to_pipeline(tasks, task)
+        task2 = remove_low_call_rate_samples(task[FLT_VARS],
+                                             min_call_rate=0.5,
+                                             filter_id='call_rate2')
+        _add_task_to_pipeline(tasks, task2)
+
+        if do_computation:
+            processed_tasks = compute(tasks,
+                                      store_variation_to_memory=True)
+        else:
+            processed_tasks = tasks
+        processed = processed_tasks
+        self.assertEqual(processed[FLT_STATS]['call_rate'][N_SAMPLES_KEPT], 2)
+        self.assertEqual(processed[FLT_STATS]['call_rate'][N_SAMPLES_FILTERED_OUT], 1)
+        self.assertEqual(processed[FLT_STATS]['call_rate2'][N_SAMPLES_KEPT], 2)
+        self.assertEqual(processed[FLT_STATS]['call_rate2'][N_SAMPLES_FILTERED_OUT], 0)
+
+        gts = processed[FLT_VARS][GT_FIELD]
+        self.assertEqual(gts.shape, (7, 2, 2))
+        self.assertTrue(np.all(processed[FLT_VARS].samples == ['mu16', 'upv196']))
+        self.assertEqual(processed[FLT_VARS].metadata, variations.metadata)
+
+    def test_filter_by_call_rate_in_memory(self):
+        variations = create_dask_variations()
+        variations = compute({'vars': variations},
+                            store_variation_to_memory=True)['vars']
         pipeline_futures = {}
 
         future_result = remove_low_call_rate_vars(variations,
@@ -75,7 +118,7 @@ class MinCallFilterTest(unittest.TestCase):
         self.assertEqual(processed[FLT_VARS].metadata, variations.metadata)
 
     def test_filter_and_hist_by_call_rate(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
         pipeline_futures = {}
 
         future_result = remove_low_call_rate_vars(variations,
@@ -90,7 +133,7 @@ class MinCallFilterTest(unittest.TestCase):
         self.assertEqual(processed[FLT_STATS]['call_rate']['limits'], [0.5])
 
     def test_filter_and_hist_by_call_rate_in_memory(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
         variations = compute({'vars': variations},
                              store_variation_to_memory=True)['vars']
         pipeline_futures = {}
@@ -107,7 +150,7 @@ class MinCallFilterTest(unittest.TestCase):
         self.assertEqual(processed[FLT_STATS]['call_rate']['limits'], [0.5])
 
     def test_filter_by_call_rate_twice(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
         pipeline_futures = {}
         # this rate has no sense but I use to remove all calls
         future_result = remove_low_call_rate_vars(variations,
@@ -127,8 +170,7 @@ class MinCallFilterTest(unittest.TestCase):
 class MinDepthGtToMissing(unittest.TestCase):
 
     def test_min_depth_gt_to_missing(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr',
-                               num_vars_per_chunk=2)
+        variations = create_dask_variations(num_vars_per_chunk=2)
         # variations = remove_low_call_rate_vars(variations, 0)[FLT_VARS]
         depth = 9
         prev_gts = variations[GT_FIELD].compute()
@@ -144,8 +186,7 @@ class MinDepthGtToMissing(unittest.TestCase):
                     self.assertFalse(np.all(prev_gt_ == [MISSING_INT, MISSING_INT]))
 
     def test_min_depth_gt_to_missing_in_memory(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr',
-                               num_vars_per_chunk=2)
+        variations = create_dask_variations(num_vars_per_chunk=2)
         variations = compute({'vars': variations},
                              store_variation_to_memory=True)['vars']
         depth = 9
@@ -164,7 +205,7 @@ class MinDepthGtToMissing(unittest.TestCase):
 class FilterSamplesTest(unittest.TestCase):
 
     def test_keep_samples(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
 #         print(variations.samples.compute())
 #         print(variations[DP_FIELD].compute())
 
@@ -173,14 +214,14 @@ class FilterSamplesTest(unittest.TestCase):
         processed = compute(task, store_variation_to_memory=True)
         dps = processed[FLT_VARS][DP_FIELD]
 
-        self.assertTrue(np.all(processed[FLT_VARS].samples == ['pepo',
-                                                               'upv196']))
-        expected = [[-1, 9], [-1, 8], [-1, 8], [14, 6], [-1, -1], [-1, -1],
-                    [-1, 6]]
+        self.assertTrue(np.all(processed[FLT_VARS].samples == ['upv196',
+                                                               'pepo']))
+        expected = [[9, -1], [8, -1], [8, -1], [6, 14],
+                    [-1, -1], [-1, -1], [6, -1]]
         self.assertTrue(np.all(dps == expected))
 
     def test_keep_samples_in_memory(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
 #         print(variations.samples.compute())
 #         print(variations[DP_FIELD].compute())
         variations = compute({'vars': variations},
@@ -189,14 +230,14 @@ class FilterSamplesTest(unittest.TestCase):
         processed = keep_samples(variations, samples=samples)
         dps = processed[FLT_VARS][DP_FIELD]
 
-        self.assertTrue(np.all(processed[FLT_VARS].samples == ['pepo',
-                                                               'upv196']))
-        expected = [[-1, 9], [-1, 8], [-1, 8], [14, 6], [-1, -1], [-1, -1],
-                    [-1, 6]]
+        self.assertTrue(np.all(processed[FLT_VARS].samples == ['upv196',
+                                                               'pepo']))
+        expected = [[9, -1], [8, -1], [8, -1], [6, 14],
+                    [-1, -1], [-1, -1], [6, -1]]
         self.assertTrue(np.all(dps == expected))
 
     def test_remove_samples(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
         samples = ['upv196', 'pepo']
 
         task = remove_samples(variations, samples=samples)
@@ -207,7 +248,7 @@ class FilterSamplesTest(unittest.TestCase):
         self.assertTrue(np.all(dps == expected))
 
     def test_remove_samples_in_memory(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
         variations = compute({'vars': variations},
                              store_variation_to_memory=True)['vars']
 
@@ -223,7 +264,7 @@ class FilterSamplesTest(unittest.TestCase):
 class MafFilterTest(unittest.TestCase):
 
     def test_maf_by_allele_count_filter(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
 
         task = filter_by_maf_by_allele_count(variations, max_allowable_maf=0.6,
                                              min_num_genotypes=2)
@@ -235,7 +276,7 @@ class MafFilterTest(unittest.TestCase):
                                              'n_filtered_out': 3})
 
     def test_maf_by_allele_count_filter_in_memory(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
 
         variations = compute({'vars': variations},
                              store_variation_to_memory=True)['vars']
@@ -250,7 +291,7 @@ class MafFilterTest(unittest.TestCase):
                                              'n_filtered_out': 3})
 
     def test_maf_filter(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
         task = filter_by_maf(variations, max_allowable_maf=0.6, max_alleles=3,
                              min_num_genotypes=2)
         result = compute(task, store_variation_to_memory=True,
@@ -260,7 +301,7 @@ class MafFilterTest(unittest.TestCase):
         self.assertEqual(result[FLT_STATS], {'n_kept': 3, 'n_filtered_out': 4})
 
     def test_maf_filter_in_memory(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
+        variations = create_dask_variations()
         variations = compute({'vars': variations},
                              store_variation_to_memory=True)['vars']
         result = filter_by_maf(variations, max_allowable_maf=0.6, max_alleles=3,
@@ -272,8 +313,7 @@ class MafFilterTest(unittest.TestCase):
         self.assertEqual(result[FLT_STATS], {'n_kept': 3, 'n_filtered_out': 4})
 
     def test_mac_filter(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr',
-                               num_vars_per_chunk=2)
+        variations = create_dask_variations(num_vars_per_chunk=2)
         task = filter_by_mac(variations, max_allowable_mac=1, max_alleles=3)
         result = compute(task, store_variation_to_memory=True,
                          silence_runtime_warnings=True)
@@ -283,8 +323,7 @@ class MafFilterTest(unittest.TestCase):
                                              'n_filtered_out': 7})
 
     def test_mac_filter_in_memory(self):
-        variations = load_zarr(TEST_DATA_DIR / 'test.zarr',
-                               num_vars_per_chunk=2)
+        variations = create_dask_variations(num_vars_per_chunk=2)
         variations = compute({'vars': variations},
                              store_variation_to_memory=True)['vars']
         result = filter_by_mac(variations, max_allowable_mac=1, max_alleles=3)

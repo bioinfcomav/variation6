@@ -44,6 +44,8 @@ def _collect_cargo_to_compute(data, store_variation_to_memory,
                         orig_dicts.append(cargo)
                         orig_keys.append(local_key)
                         darrays_to_compute.append(local_cargo)
+                    else:
+                        raise RuntimeError('Asking to store variations in memory that are already in memory')
     return darrays_to_compute, orig_keys, orig_dicts, variation_info
 
 

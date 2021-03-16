@@ -45,9 +45,12 @@ FLT_STATS = 'flt_stats'
 FLT_ID = 'flt_id'
 N_KEPT = 'n_kept'
 N_FILTERED_OUT = 'n_filtered_out'
+N_SAMPLES_KEPT = 'n_samples_kept'
+N_SAMPLES_FILTERED_OUT = 'n_samples_filtered_out'
 TOT = 'tot'
 COUNT = 'counts'
 BIN_EDGES = 'bin_edges'
+HIST_RANGE = 'limits'
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
 
@@ -111,6 +114,9 @@ class _MissingValues():
 
 
 MISSING_VALUES = _MissingValues()
+
+
+DEFAULT_VARIATION_NUM_IN_CHUNK = 40000
 
 
 class EmptyVariationsError(Exception):
