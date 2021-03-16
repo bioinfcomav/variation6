@@ -1,10 +1,15 @@
-import test_config
+
 import unittest
+
+from tempfile import mkdtemp
+from pathlib import Path
+import math
 
 import numpy as np
 import dask.array as da
-import math
 
+from test_utils import (create_dask_variations,
+                        create_non_materialized_snp_filtered_variations)
 import variation6.array as va
 from variation6 import (GT_FIELD, AO_FIELD, RO_FIELD, DP_FIELD,
                         EmptyVariationsError, FLT_VARS, ALT_FIELD,
@@ -22,22 +27,11 @@ from variation6.stats.diversity import (calc_missing_gt, calc_maf_by_gt,
                                         summarize_variations,
                                         calc_missing_gt_per_sample)
 from variation6.filters import remove_low_call_rate_vars, keep_samples
-from tempfile import mkdtemp
-from pathlib import Path
 
 
 def _create_empty_dask_variations():
     variations = load_zarr(TEST_DATA_DIR / 'test.zarr')
     return remove_low_call_rate_vars(variations, min_call_rate=1.1)[FLT_VARS]
-
-
-def _create_dask_variations():
-    return load_zarr(TEST_DATA_DIR / 'test.zarr')
-
-
-def _create_filtered_variations():
-    variations = _create_dask_variations()
-    return remove_low_call_rate_vars(variations, min_call_rate=0)[FLT_VARS]
 
 
 class StatsTest(unittest.TestCase):
@@ -53,7 +47,7 @@ class StatsTest(unittest.TestCase):
         self.assertTrue(np.all(counts == expected))
 
     def test_allele_count_dask(self):
-        variations = _create_filtered_variations()
+        variations = create_non_materialized_snp_filtered_variations()
         gts = variations[GT_FIELD]
         counts = count_alleles(gts, max_alleles=3)
         expected = [[2, 2, 0, 2], [2, 2, 0, 2], [2, 2, 0, 2], [3, 1, 0, 2, ],
@@ -72,13 +66,13 @@ class StatsTest(unittest.TestCase):
         self.assertEqual(counts.shape, (0, 4))
 
     def test_calc_missing(self):
-        variations = _create_filtered_variations()
+        variations = create_non_materialized_snp_filtered_variations()
         variations = keep_samples(variations, samples=['pepo', 'upv196'])[FLT_VARS]
         task = calc_missing_gt(variations, rates=False)
         result = compute({'num_missing_gts': task})
         self.assertTrue(np.array_equal(result['num_missing_gts'],
                                        [1, 1, 1, 0, 2, 2, 1]))
-        variations = _create_filtered_variations()
+        variations = create_non_materialized_snp_filtered_variations()
         variations = keep_samples(variations, samples=['pepo', 'upv196'])[FLT_VARS]
         task = calc_missing_gt(variations, rates=True)
         result = compute({'num_missing_gts': task})
@@ -86,18 +80,18 @@ class StatsTest(unittest.TestCase):
         for a, b in zip(result['num_missing_gts'], expected):
             self.assertAlmostEqual(a, b, places=2)
 
-        variations = _create_dask_variations()
+        variations = create_dask_variations()
         task = calc_missing_gt_per_sample(variations, rates=True)
         result = compute({'num_missing_gts': task})
 
-        variations = _create_filtered_variations()
+        variations = create_non_materialized_snp_filtered_variations()
         try:
             task = calc_missing_gt_per_sample(variations, rates=True)
             self.fail('NotMaterializedError expected')
         except NotMaterializedError:
             pass
 
-        variations = _create_dask_variations()
+        variations = create_dask_variations()
         task = calc_missing_gt_per_sample(variations, rates=False)
         result = compute({'num_missing_gts': task})
 
@@ -409,7 +403,7 @@ class AlleleFreqTests(unittest.TestCase):
         assert np.allclose(allele_freq, expected)
 
     def test_allele_freq_with_variations(self):
-        variations = _create_dask_variations()
+        variations = create_dask_variations()
 #         variations = remove_low_call_rate_vars(variations, min_call_rate=0,
 #                                                calc_histogram=False)[FLT_VARS]
 
@@ -467,7 +461,7 @@ class ExpectedHetTest(unittest.TestCase):
         assert np.allclose(result, exp)
 
     def test_expected_het_with_real(self):
-        variations = _create_dask_variations()
+        variations = create_dask_variations()
         max_alleles = variations[ALT_FIELD].shape[1] + 1
         task = calc_expected_het(variations, max_alleles=max_alleles,
                                  min_num_genotypes=0)
@@ -479,7 +473,7 @@ class ExpectedHetTest(unittest.TestCase):
 class DiversitiesTests(unittest.TestCase):
 
     def test_calc_diversities(self):
-        variations = _create_dask_variations()
+        variations = create_dask_variations()
         max_alleles = variations[ALT_FIELD].shape[1] + 1
 
         task = calc_diversities(variations, max_alleles=max_alleles,
@@ -492,7 +486,7 @@ class DiversitiesTests(unittest.TestCase):
         self.assertAlmostEqual(result['obs_het'], 0.333, places=2)
 
     def test_calc_diversities_in_memory(self):
-        variations = _create_dask_variations()
+        variations = create_dask_variations()
         max_alleles = variations[ALT_FIELD].shape[1] + 1
         variations = compute({'vars': variations},
                              store_variation_to_memory=True)['vars']
@@ -517,7 +511,7 @@ class SummarizeStatsTests(unittest.TestCase):
                              silence_runtime_warnings=True)
 
     def test_calc_maf_by_gt2(self):
-        variations = _create_dask_variations()
+        variations = create_dask_variations()
         mafs = calc_maf_by_gt(variations, max_alleles=3,
                               min_num_genotypes=0)
 
