@@ -22,7 +22,9 @@ def vcf_to_hdf5(vcf_path, h5_path, fields=None):
     allel.vcf_to_hdf5(str(vcf_path), str(h5_path), fields=zarr_fields)
 
 
-def load_hdf5(path):
+def load_hdf5(path, fields=None):
+    if fields is None:
+        fields = []
     store = h5py.File(str(path), mode='r')
     samples = store['samples']
     variations = Variations(samples=da.from_array(samples,
@@ -33,6 +35,8 @@ def load_hdf5(path):
             for array_name, dataset in group.items():
                 path = f'{group_name}/{array_name}'
                 path = ZARR_VARIATION_FIELD_MAPPING[path]
+                if fields and path not in fields:
+                    continue
                 if dataset.attrs:
                     metadata[path] = dict(dataset.attrs.items())
                 chunks = [600]
