@@ -165,3 +165,9 @@ class Variations:
             for field, block in zip(fields, array_block):
                 variations[field] = block
             yield variations
+
+
+def samples_to_numpy_str(samples):
+    samples = [sample.decode() for sample in samples.compute()]
+    return samples
+
