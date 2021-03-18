@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 import numpy as np
 import dask.array as da
+
 from variation6 import (PUBLIC_CALL_GROUP, GT_FIELD, EmptyVariationsError,
                         DEF_CHUNK_SIZE, NotMaterializedError)
 
@@ -166,8 +167,4 @@ class Variations:
                 variations[field] = block
             yield variations
 
-
-def samples_to_numpy_str(samples):
-    samples = [sample.decode() for sample in samples.compute()]
-    return samples
 

@@ -293,6 +293,11 @@ def reshape_if_needed(array, mask):
     return mask
 
 
+def samples_to_numpy_str(samples):
+    samples = [sample.decode() for sample in make_sure_array_is_in_memory(samples)]
+    return samples
+
+
 # rara
 def reduce_chunk_dimensions(array):
     chunks = None

@@ -92,7 +92,7 @@ def prepare_zarr_storage(variations, out_path):
     targets = []
 
     samples_array = variations.samples
-    samples_array.compute_chunk_sizes()
+    #samples_array.compute_chunk_sizes()
     sources.append(samples_array)
 
     object_codec = None

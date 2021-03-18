@@ -6,6 +6,6 @@ from .array_calculations import (add, all, amax, any, assign_with_mask,
                                  logical_and, logical_not, logical_or,
                                  map_blocks, make_sure_array_is_in_memory, max,
                                  min, nanmean, nansum, ones, sum, stack,
-                                 full, isfinite, pack)
+                                 full, isfinite, pack, samples_to_numpy_str)
 
 from .genotype import gts_as_mat012

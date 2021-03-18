@@ -54,7 +54,7 @@ HIST_RANGE = 'limits'
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
 
-DEF_CHUNK_SIZE = 10000
+DEF_CHUNK_SIZE = 1000
 
 MISSING_INT = -1
 MISSING_FLOAT = float('nan')
@@ -64,6 +64,8 @@ MISSING_BOOL = False
 
 MISSING_GT = [MISSING_INT, MISSING_INT]
 
+ZARR = 'zarr'
+H5PY = 'h5py'
 
 class _MissingValues():
 

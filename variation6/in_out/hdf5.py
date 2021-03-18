@@ -4,6 +4,7 @@ import dask.array as da
 import h5py
 from h5py._hl.group import Group
 
+from variation6 import DEF_CHUNK_SIZE
 from variation6.variations import Variations
 from variation6.in_out.zarr import (DEF_VCF_FIELDS,
                                     VARIATION_ZARR_FIELD_MAPPING,
@@ -27,6 +28,7 @@ def load_hdf5(path, fields=None):
         fields = []
     store = h5py.File(str(path), mode='r')
     samples = store['samples']
+    print(samples)
     variations = Variations(samples=da.from_array(samples,
                                                   chunks=samples.shape))
     metadata = {}
@@ -39,12 +41,12 @@ def load_hdf5(path, fields=None):
                     continue
                 if dataset.attrs:
                     metadata[path] = dict(dataset.attrs.items())
-                chunks = [600]
-                if dataset.ndim > 1:
-                    chunks.append(dataset.shape[1])
-                if dataset.ndim > 2:
-                    chunks.append(dataset.shape[2])
-                variations[path] = da.from_array(dataset, chunks=tuple(chunks))
+
+                chunks = list(dataset.shape)
+                chunks[0] = DEF_CHUNK_SIZE
+                chunks = tuple(chunks)
+
+                variations[path] = da.from_array(dataset, chunks=chunks)
 
     variations.metadata = metadata
     return variations
@@ -75,7 +77,7 @@ def prepare_hdf5_storage(variations, out_path):
     metadata = variations.metadata
     # samples
     samples_array = variations.samples
-    samples_array.compute_chunk_sizes()
+    #samples_array.compute_chunk_sizes()
 
     sources.append(samples_array)
     dataset = _create_hdf5_dataset(store, '/samples', samples_array)
@@ -91,4 +93,3 @@ def prepare_hdf5_storage(variations, out_path):
         targets.append(dataset)
 
     return da.store(sources, targets, compute=False)
-

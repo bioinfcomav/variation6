@@ -2,13 +2,14 @@ import sys
 from collections import OrderedDict
 
 import numpy as np
+import dask
 
-from variation6 import (GT_FIELD, DP_FIELD, MISSING_INT, QUAL_FIELD,
+from variation6 import (GT_FIELD, DP_FIELD, H5PY, MISSING_INT, QUAL_FIELD,
                         PUBLIC_CALL_GROUP, N_KEPT, N_FILTERED_OUT,
                         FLT_VARS, CHROM_FIELD, POS_FIELD,
                         MIN_NUM_GENOTYPES_FOR_POP_STAT, ALT_FIELD, FLT_STATS,
                         FLT_ID, COUNT, BIN_EDGES, N_SAMPLES_KEPT,
-                        N_SAMPLES_FILTERED_OUT, HIST_RANGE)
+                        N_SAMPLES_FILTERED_OUT, HIST_RANGE, ZARR, H5PY)
 from variation6.variations import Variations
 import variation6.array as va
 from variation6.stats.diversity import (calc_missing_gt, calc_maf_by_allele_count,
@@ -16,9 +17,10 @@ from variation6.stats.diversity import (calc_missing_gt, calc_maf_by_allele_coun
                                         calc_missing_gt_per_sample, count_alleles,
                                         calc_obs_het, DEF_NUM_BINS)
 from variation6.in_out.zarr import load_zarr, prepare_zarr_storage
+from variation6.in_out.hdf5 import load_hdf5, prepare_hdf5_storage
 from variation6.compute import compute
 from variation6.plot import plot_histogram
-import variation6.utils_array
+from variation6 import utils_file
 
 
 def remove_low_call_rate_vars(variations, min_call_rate, rates=True,
@@ -125,19 +127,28 @@ def keep_samples_with_mask(variations, sample_mask):
     return _filter_samples(variations, desired_samples)
 
 
+def _str_list_to_byte_list(str_list):
+    return [item.encode() if isinstance(item, str) else item for item in str_list]
+
+
 def _filter_samples(variations, desired_samples, reverse=False):
-    orig_sample_names = list(va.make_sure_array_is_in_memory(variations.samples))
+    desired_samples = _str_list_to_byte_list(desired_samples)
+
+    orig_sample_names = va.make_sure_array_is_in_memory(variations.samples)
 
     if reverse:
         desired_samples = [sample for sample in orig_sample_names if sample not in desired_samples]
 
+    orig_sample_names = list(orig_sample_names)
     sample_cols = np.array([orig_sample_names.index(sample) for sample in desired_samples])
+    sample_cols = list(sample_cols)
 
     new_variations = Variations(samples=np.array(desired_samples),
                                 metadata=variations.metadata)
     for field, array in variations._arrays.items():
-        if PUBLIC_CALL_GROUP in field:
-            array = array[:, sample_cols]
+        if PUBLIC_CALL_GROUP in field:            
+            with dask.config.set(**{'array.slicing.split_large_chunks': False}):
+                array = array[:, sample_cols]
         new_variations[field] = array
     return {FLT_VARS: new_variations}
 
@@ -373,7 +384,7 @@ def _add_task_to_pipeline(pipeline_tasks, task):
         pipeline_tasks[FLT_STATS][task[FLT_ID]] = task[FLT_STATS]
 
 
-def filter_variations(in_zarr_path, out_zarr_path, samples_to_keep=None,
+def filter_variations(in_path, out_path, samples_to_keep=None,
                       samples_to_remove=None, regions_to_remove=None,
                       regions_to_keep=None, min_call_rate=None,
                       min_dp_setter=None, remove_non_variable_snvs=None,
@@ -381,8 +392,24 @@ def filter_variations(in_zarr_path, out_zarr_path, samples_to_keep=None,
                       min_call_dp_for_het_call=None, verbose=True,
                       out_fhand=sys.stdout, calc_histogram=False):
 
+    in_storage_type = utils_file.get_var_file_type(in_path)
+    out_storage_type = utils_file.get_var_file_type(out_path)
+
+    assert in_storage_type in (H5PY, ZARR)
+    assert out_storage_type in (H5PY, ZARR)
+
+    if in_storage_type == ZARR:
+        load_function = load_zarr
+    elif in_storage_type == H5PY:
+        load_function = load_hdf5
+
+    if out_storage_type == ZARR:
+        prepare_storage_function = prepare_zarr_storage
+    elif out_storage_type == H5PY:
+        prepare_storage_function = prepare_hdf5_storage
+
     pipeline_tasks = {}
-    variations = load_zarr(in_zarr_path)
+    variations = load_function(in_path)
     max_alleles = variations[ALT_FIELD].shape[1]
     task = {FLT_VARS: variations}
 
@@ -437,7 +464,8 @@ def filter_variations(in_zarr_path, out_zarr_path, samples_to_keep=None,
                                            calc_histogram=calc_histogram)
         _add_task_to_pipeline(pipeline_tasks, task)
 
-    delayed_store = prepare_zarr_storage(task[FLT_VARS], out_zarr_path)
+    delayed_store = prepare_storage_function(task[FLT_VARS],
+                                             out_path)
     pipeline_tasks[FLT_VARS] = delayed_store
 
     result = compute(pipeline_tasks, store_variation_to_memory=False,
